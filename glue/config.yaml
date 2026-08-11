@@ -1,0 +1,31 @@
+wlk:
+  url: "ws://127.0.0.1:8000/asr?target_language=zh"
+  min_text_len: 2
+  debounce_seconds: 2.0   # how long a tail sentence must be stable before translation
+  force_len: 60           # force-flush a line once its text grows this long
+
+llm:
+  enabled: true           # true: translate ASR source text via DeepSeek (replaces NLLB)
+  api_key: ""             # leave empty to use env var DEEPSEEK_API_KEY (recommended)
+  base_url: "https://api.deepseek.com"
+  model: "deepseek-chat"
+  max_batch: 4            # sentences per API call
+  batch_window: 0.4       # seconds to wait for more sentences before flushing a batch
+  timeout: 30
+  glossary: []            # e.g. [{"from": "RTX", "to": "RTX"}]
+
+tts:
+  url: "http://127.0.0.1:50001/tts"
+  ref_audio: "refs/default.wav"   # relative to this config file's directory
+  max_text_len: 80
+  timeout: 1800
+
+playback:
+  sample_rate: 22050
+  device: null          # null = system default output device
+  sentence_gap: 0.4     # seconds of silence inserted between sentences
+  queue_seconds: 2.0    # delay knob: keep each sentence this far behind its ready time
+
+relay:
+  host: "127.0.0.1"
+  port: 5100

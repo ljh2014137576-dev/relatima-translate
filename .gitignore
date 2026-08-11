@@ -1,0 +1,41 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv_wlk/
+venv_glue/
+
+# ---- External dependencies (installed separately, see dubbing/README.md) ----
+index-tts/
+
+# ---- Model checkpoints & caches ----
+**/checkpoints/
+**/hf_cache/
+**/.cache/
+.cache/
+
+# ---- Secrets ----
+.env
+*.env.local
+glue/config.local.yaml
+
+# ---- Logs & runtime ----
+*.log
+
+# ---- Test samples & generated audio ----
+dubbing/samples/*.wav
+!dubbing/samples/jfk.wav
+dubbing/samples/*.json
+dubbing/samples/*.txt
+dubbing/samples/probe_wlk.py
+dubbing/samples/test_*.py
+dubbing/samples/dl_*.py
+
+# Reference voices (add your own; only the public-domain sample is committed)
+glue/refs/*.wav
+!glue/refs/default.wav
+
+# ---- OS ----
+Thumbs.db
+Desktop.ini
+.DS_Store
