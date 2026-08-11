@@ -682,15 +682,12 @@ async function startRecording() {
             }
           });
         });
-        
-        try {
-          outputAudioContext = new (window.AudioContext || window.webkitAudioContext)();
-          audioSource = outputAudioContext.createMediaStreamSource(stream);
-          audioSource.connect(outputAudioContext.destination);
-        } catch (audioError) {
-          console.warn('could not preserve system audio:', audioError);
-        }
-        
+
+        // Dubbing mode: do NOT route the original tab audio back to the
+        // speakers (that would play both languages). Mute the video TAB
+        // (right-click the tab -> Mute site) so only the Chinese dubbing
+        // is heard; tabCapture still receives the tab's audio stream.
+
         statusText.textContent = "Using tab audio capture.";
       } catch (tabError) {
         console.log('Tab capture not available, falling back to microphone', tabError);

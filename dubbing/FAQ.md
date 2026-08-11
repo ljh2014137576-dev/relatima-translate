@@ -1,4 +1,4 @@
-# FAQ（实际遇到的坑与解法）
+﻿# FAQ（实际遇到的坑与解法）
 
 ## 1. HuggingFace 连不上 / 下载超时
 HF 直连超时（国内网络）。统一用镜像：
@@ -61,3 +61,14 @@ PowerShell 默认 GBK，Python 打印 UTF-8 中文会乱码（不影响功能）
 实测 4 句英文 NLLB 只译 1 句、DeepSeek 4 句全对。想关掉 LLM 翻译回退 NLLB：`llm.enabled: false`。
 自定义词表（专名/梗）配 `llm.glossary`，会注入翻译 prompt。
 注意：LLM 依赖外网（DeepSeek API）；网络不可用时句子会被跳过（日志 `[LLM FAIL]`）。
+
+
+## 10. 扩展报 "Error accessing microphone / No audio detected"
+扩展实际是**抓标签页音频**（`chrome.tabCapture`），不依赖麦克风。此报错常由两个真实原因触发：
+1. **扩展缺少 `web/` 目录**：`addModule("/web/pcm_worklet.js")` 找不到文件就抛错，误报成麦克风错误。
+   仓库已修复（`chrome-extension/web/` 内含 worklet/recorder/src 图标）。**改完必须到
+   `chrome://extensions` 点扩展卡片的"重新加载"**（或移除后重新加载），否则用的还是旧代码。
+2. **静音方式不对**：视频在**播放器里静音**会让标签页音频变静音，tabCapture 就抓不到（No audio detected）。
+   正确做法：**右键视频标签页 -> 静音网站/静音标签页**（tab 级静音不影响 tabCapture 抓流）。
+   扩展已去掉"原声回放"，所以 tab 静音后只会听到中文配音。
+3. 保持扩展弹窗打开、视频标签页处于**前台激活**状态再点 Start Capture（弹窗关闭会中断抓流）。
