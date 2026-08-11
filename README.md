@@ -21,17 +21,28 @@
 
 ## 快速开始
 
-完整安装与启动步骤见 **[dubbing/README.md](dubbing/README.md)**，排障见 **[dubbing/FAQ.md](dubbing/FAQ.md)**。
+### 全新机器一键安装（Release 整合包）
+
+下载 GitHub Release 里的 `Source code (zip)` 解压，在仓库根目录执行：
 
 ```powershell
 # 1) 设置 DeepSeek key（必填，用于翻译）
 setx DEEPSEEK_API_KEY "sk-xxx"
 
-# 2) 一键启动三个服务
+# 2) 一键安装：Python 检测 / venv / PyTorch cu128 / WhisperLiveKit /
+#    WLK 模型(hf-mirror) / IndexTTS2 + 5.5GB 模型(ModelScope 国内源)
+powershell -ExecutionPolicy Bypass -File tools\install.ps1
+
+# 3) 启动三个服务
 powershell -ExecutionPolicy Bypass -File dubbing\start_services.ps1
 
-# 3) Chrome 加载 chrome-extension/（解压扩展），视频页静音后 Start Capture
+# 4) Chrome 加载 chrome-extension/（解压扩展），视频页静音后 Start Capture
 ```
+
+安装约 10~15 分钟（模型 ~7GB，走国内镜像 ~40MB/s）。
+调试可加 `-SkipModels` / `-SkipIndexTTS` 跳过模型下载。
+
+完整安装与启动步骤见 **[dubbing/README.md](dubbing/README.md)**，排障见 **[dubbing/FAQ.md](dubbing/FAQ.md)**。
 
 ### 本地文件全链路测试（不依赖浏览器）
 
@@ -53,5 +64,6 @@ cd glue
 
 ## 许可证
 
-组件各属其上游（WhisperLiveKit Apache-2.0，IndexTTS2 见其仓库）。
-本项目代码结构参考《模式 A·实时配音落地计划》。
+本项目代码采用 **MIT License**（见 `LICENSE`）。
+依赖组件各属其上游：WhisperLiveKit（Apache-2.0）、IndexTTS2（见其仓库）。
+结构参考《模式 A·实时配音落地计划》。
