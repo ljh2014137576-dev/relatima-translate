@@ -15,10 +15,24 @@ llm:
   glossary: []            # e.g. [{"from": "RTX", "to": "RTX"}]
 
 tts:
-  url: "http://127.0.0.1:50001/tts"
-  ref_audio: "refs/default.wav"   # relative to this config file's directory
+  provider: "local"        # local | minimax | elevenlabs | edge
+  url: "http://127.0.0.1:50001/tts"     # only for provider=local
+  ref_audio: "refs/default.wav"         # reference voice (used for cloning)
   max_text_len: 80
   timeout: 1800
+  minimax:
+    api_key: ""            # or env MINIMAX_API_KEY
+    group_id: ""           # or env MINIMAX_GROUP_ID (required by MiniMax)
+    model: "speech-02-turbo"
+    voice_id: ""           # optional; if empty, auto-clone from ref_audio on first use
+    timeout: 60
+  elevenlabs:
+    api_key: ""            # or env ELEVENLABS_API_KEY
+    voice_id: ""
+    model: "eleven_multilingual_v2"
+    timeout: 60
+  edge:
+    voice: "zh-CN-YunxiNeural"
 
 playback:
   sample_rate: 22050

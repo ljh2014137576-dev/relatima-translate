@@ -50,24 +50,34 @@ for ($i=0; $i -lt 30; $i++) {
 }
 if (-not $ok) { Write-Host "  WARNING: WLK not healthy yet" }
 
-# --- 2. IndexTTS2 service ---------------------------------------------------
-Write-Host "[2/3] Starting IndexTTS2 dubbing service on :50001 ..."
-$tts = Get-NetTCPConnection -LocalPort 50001 -State Listen -ErrorAction SilentlyContinue
-if ($tts) {
-    Write-Host "  TTS already running"
+# --- 2. IndexTTS2 service (only needed for provider=local) ----------------
+$provider = "local"
+if (Test-Path "$Root\glue\config.yaml") {
+    $line = Get-Content "$Root\glue\config.yaml" | Where-Object { $_ -match '^\s*provider:' } | Select-Object -First 1
+    if ($line -match ':\s*"?([\w-]+)"?') { $provider = $Matches[1] }
+}
+Write-Host "[2/3] TTS provider: $provider"
+if ($provider -ne "local") {
+    Write-Host "  Skipping local IndexTTS2 service (using $provider)."
 } else {
-    $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
-    $env:PYTHONPATH = "$Root\index-tts"
-    Start-Process -FilePath "uv" -ArgumentList "run","$Root\indextts_service\server.py","--host","127.0.0.1","--port","50001" `
-        -WorkingDirectory "$Root\index-tts" -WindowStyle Hidden `
-        -RedirectStandardOutput "$Root\tts_stdout.log" -RedirectStandardError "$Root\tts_stderr.log" | Out-Null
+    Write-Host "Starting IndexTTS2 dubbing service on :50001 ..."
+    $tts = Get-NetTCPConnection -LocalPort 50001 -State Listen -ErrorAction SilentlyContinue
+    if ($tts) {
+        Write-Host "  TTS already running"
+    } else {
+        $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
+        $env:PYTHONPATH = "$Root\index-tts"
+        Start-Process -FilePath "uv" -ArgumentList "run","$Root\indextts_service\server.py","--host","127.0.0.1","--port","50001" `
+            -WorkingDirectory "$Root\index-tts" -WindowStyle Hidden `
+            -RedirectStandardOutput "$Root\tts_stdout.log" -RedirectStandardError "$Root\tts_stderr.log" | Out-Null
+    }
+    $ok = $false
+    for ($i=0; $i -lt 40; $i++) {
+        Start-Sleep -Seconds 5
+        try { if ((curl.exe -s -m 3 "http://127.0.0.1:50001/health") -match '"ok"') { Write-Host "  TTS healthy"; $ok = $true; break } } catch {}
+    }
+    if (-not $ok) { Write-Host "  WARNING: TTS not healthy yet (model load can take ~2min)" }
 }
-$ok = $false
-for ($i=0; $i -lt 40; $i++) {
-    Start-Sleep -Seconds 5
-    try { if ((curl.exe -s -m 3 "http://127.0.0.1:50001/health") -match '"ok"') { Write-Host "  TTS healthy"; $ok = $true; break } } catch {}
-}
-if (-not $ok) { Write-Host "  WARNING: TTS not healthy yet (model load can take ~2min)" }
 
 # --- 3. glue relay ----------------------------------------------------------
 Write-Host "[3/3] Starting glue relay on :5100 ..."

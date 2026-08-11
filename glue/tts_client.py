@@ -1,26 +1,29 @@
-"""HTTP client for the IndexTTS2 dubbing service (POST /tts -> WAV bytes)."""
+"""TTS client facade.
+
+Selects the backend from config `tts.provider` (minimax | elevenlabs | edge | local)
+and exposes a uniform synthesize(text) -> wav bytes interface.
+
+Set the provider in glue/config.yaml, e.g.:
+    tts:
+      provider: minimax
+      minimax:
+        api_key: ""        # or env MINIMAX_API_KEY
+        group_id: ""       # or env MINIMAX_GROUP_ID
+        model: speech-02-turbo
+"""
 import os
 
-import requests
+from tts_providers import build_tts
 
 
 class TTSClient:
-    def __init__(self, cfg, config_dir=None):
-        self.url = cfg["tts"]["url"]
-        self.timeout = cfg["tts"].get("timeout", 600)
-        # Resolve the reference audio to an absolute path. config_dir defaults
-        # to the directory of this module so `refs/xxx.wav` works regardless of
-        # where the IndexTTS2 server process is running.
-        config_dir = config_dir or os.path.dirname(os.path.abspath(__file__))
-        ref = cfg["tts"]["ref_audio"]
-        self.ref_audio = os.path.abspath(os.path.join(config_dir, ref))
+    def __init__(self, cfg):
+        self.config_dir = os.path.dirname(os.path.abspath(__file__))
+        self._engine = build_tts(cfg, config_dir=self.config_dir)
 
     def synthesize(self, text, emo_alpha=None):
-        payload = {"text": text, "ref_audio": self.ref_audio}
-        if emo_alpha is not None:
-            payload["emo_alpha"] = emo_alpha
-        resp = requests.post(self.url, json=payload, timeout=self.timeout)
-        resp.raise_for_status()
-        if not resp.content:
-            raise RuntimeError("empty wav from TTS service")
-        return resp.content
+        return self._engine.synthesize(text)
+
+    @property
+    def engine(self):
+        return self._engine

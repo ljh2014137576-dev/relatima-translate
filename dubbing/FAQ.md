@@ -62,6 +62,19 @@ PowerShell 默认 GBK，Python 打印 UTF-8 中文会乱码（不影响功能）
 自定义词表（专名/梗）配 `llm.glossary`，会注入翻译 prompt。
 注意：LLM 依赖外网（DeepSeek API）；网络不可用时句子会被跳过（日志 `[LLM FAIL]`）。
 
+## 9b. 云端 TTS（替代本地 IndexTTS2）
+`glue/config.yaml` 的 `tts.provider` 支持四种后端：
+- `local`：本地 IndexTTS2（需启动 :50001 服务，占用 GPU）
+- `minimax`：MiniMax T2A + 声音克隆（需 `MINIMAX_API_KEY` + `MINIMAX_GROUP_ID`，
+  或 config 的 `tts.minimax.api_key/group_id`；`voice_id` 留空则首次从 `ref_audio` 自动克隆）
+- `elevenlabs`：ElevenLabs（需 `ELEVENLABS_API_KEY`，`voice_id` 留空则自动克隆）
+- `edge`：微软 Edge 免费（不能克隆，固定中文声线，国内可能连不上）
+
+**MiniMax 常见报错**：
+- `1008 insufficient balance` → 账户余额不足，去 platform.minimaxi.com 充值。
+- `2038 voice clone user forbidden` → 控制台未开通"声音复刻"权限（或套餐不含），需在控制台开启。
+- 克隆的 voice_id 会缓存到 `glue/refs/.voice_cache.json`，不用每次重新克隆。
+
 
 ## 10. 扩展报 "Error accessing microphone / No audio detected"
 扩展实际是**抓标签页音频**（`chrome.tabCapture`），不依赖麦克风。

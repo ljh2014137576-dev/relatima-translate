@@ -92,7 +92,10 @@ cd H:\ttstranslate\glue
 | `llm.model` | deepseek-chat | DeepSeek 模型 |
 | `llm.max_batch` / `llm.batch_window` | 4 / 0.4 | 每批翻译句子数 / 批量收集窗口秒数 |
 | `llm.glossary` | [] | 自定义词表，如 `[{"from":"RTX","to":"RTX"}]` |
-| `tts.ref_audio` | refs/default.wav | 说话人参考音频（相对 glue/ 目录自动解析为绝对路径） |
+| `tts.provider` | local | `local`(IndexTTS2) / `minimax` / `elevenlabs` / `edge` |
+| `tts.ref_audio` | refs/default.wav | 说话人参考音频（minimax/elevenlabs 用它克隆音色） |
+| `tts.minimax.api_key/group_id` | env | MiniMax key+团队ID（或环境变量 `MINIMAX_API_KEY`/`MINIMAX_GROUP_ID`） |
+| `tts.elevenlabs.api_key` | env | ElevenLabs key（或 `ELEVENLABS_API_KEY`） |
 | `tts.max_text_len` | 80 | 单次合成最大字数，超出按标点切分 |
 | `playback.queue_seconds` | 2.0 | 延迟旋钮：每句相对其就绪时刻滞后 X 秒播放 |
 | `playback.sentence_gap` | 0.4 | 句间静音，避免连读 |
