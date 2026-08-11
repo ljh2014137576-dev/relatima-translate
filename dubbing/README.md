@@ -63,6 +63,23 @@ cd H:\ttstranslate\glue
 `--delay 5` 为倒计时（对齐播放器起点）；`--speed 0` 可跳过喂入等待；
 `--dry-run` 只打印将配音的文本，不做 TTS（快速调试用）。
 
+**4. 批量/预加载配音（模式二，整段处理好再播）**
+
+```powershell
+cd H:\ttstranslate\glue
+..\venv_glue\Scripts\python.exe batch_dub.py "视频文件.mp4"      # 本地文件
+..\venv_glue\Scripts\python.exe batch_dub.py "https://youtu.be/xxx"   # 在线视频(yt-dlp)
+..\venv_glue\Scripts\python.exe batch_dub.py in.mp4 --dry-run   # 只看翻译+字幕，不做 TTS
+```
+
+产出（`glue/out/`）：
+- `xxx_dub.wav`：整段中文配音音轨（按句时间轴对齐）
+- `xxx_zh.srt`：中文字幕
+- `xxx_dubbed.mp4`：配音混入原视频（视频输入时）
+
+> 批量模式逐个句子过 IndexTTS2（RTF ~2），10 分钟视频约 13 分钟处理完（GPU 空闲时）；
+> ComfyUI 占 GPU 时会慢几十倍。建议处理时让 GPU 空闲。
+
 ## 配置说明（glue/config.yaml）
 
 | 键 | 默认 | 说明 |
