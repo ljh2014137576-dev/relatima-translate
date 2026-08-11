@@ -17,6 +17,13 @@ $Root = Split-Path $PSScriptRoot -Parent
 $env:HF_HUB_OFFLINE = "1"   # models are cached locally; skip flaky HF HEAD checks
 $env:HF_ENDPOINT = "https://hf-mirror.com"
 
+# DeepSeek key is required for LLM translation (glue will not start without it).
+if (-not $env:DEEPSEEK_API_KEY) {
+    Write-Host "WARNING: DEEPSEEK_API_KEY not set. Set it first:" -ForegroundColor Yellow
+    Write-Host "  setx DEEPSEEK_API_KEY sk-你的key   (then reopen terminal)" -ForegroundColor Yellow
+    Write-Host "  (glue 将无法启动翻译，除非 config.yaml 的 llm.api_key 已填写)" -ForegroundColor Yellow
+}
+
 if (-not (Test-Path "$Root\index-tts")) { Write-Host "ERROR: $Root\index-tts not found. See dubbing/README.md."; exit 1 }
 if (-not (Test-Path "$Root\venv_wlk\Scripts\wlk.exe")) { Write-Host "ERROR: venv_wlk missing."; exit 1 }
 if (-not (Test-Path "$Root\venv_glue\Scripts\python.exe")) { Write-Host "ERROR: venv_glue missing."; exit 1 }

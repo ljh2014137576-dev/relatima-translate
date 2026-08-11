@@ -1,29 +1,35 @@
 {
     "manifest_version": 3,
-    "name": "WhisperLiveKit Tab Capture",
-    "version": "1.0",
-    "description": "Capture and transcribe audio from browser tabs using WhisperLiveKit.",
+    "name": "Relatima Translate · 实时同传",
+    "version": "1.1.0",
+    "description": "后台常驻抓取标签页音频，实时翻译成中文并用克隆原声配音（同声传译）。点击图标开始/停止。",
     "icons": {
         "16": "icons/icon16.png",
-        "32": "icons/icon32.png",
         "48": "icons/icon48.png",
         "128": "icons/icon128.png"
     },
-    "action": {
-        "default_title": "WhisperLiveKit Tab Capture",
-        "default_popup": "live_transcription.html"
-    },
     "permissions": [
-        "scripting",
         "tabCapture",
         "offscreen",
         "activeTab",
-        "storage"
+        "storage",
+        "tabs"
     ],
     "host_permissions": [
-        "http://localhost/*",
-        "ws://localhost/*",
         "http://127.0.0.1/*",
-        "ws://127.0.0.1/*"
-    ]
+        "ws://127.0.0.1/*",
+        "http://localhost/*",
+        "ws://localhost/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "action": {
+        "default_title": "Relatima Translate（点击开始/停止同传）",
+        "default_icon": {
+            "16": "icons/icon16.png",
+            "48": "icons/icon48.png",
+            "128": "icons/icon128.png"
+        }
+    }
 }

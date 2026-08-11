@@ -64,11 +64,24 @@ PowerShell 默认 GBK，Python 打印 UTF-8 中文会乱码（不影响功能）
 
 
 ## 10. 扩展报 "Error accessing microphone / No audio detected"
-扩展实际是**抓标签页音频**（`chrome.tabCapture`），不依赖麦克风。此报错常由两个真实原因触发：
-1. **扩展缺少 `web/` 目录**：`addModule("/web/pcm_worklet.js")` 找不到文件就抛错，误报成麦克风错误。
-   仓库已修复（`chrome-extension/web/` 内含 worklet/recorder/src 图标）。**改完必须到
-   `chrome://extensions` 点扩展卡片的"重新加载"**（或移除后重新加载），否则用的还是旧代码。
-2. **静音方式不对**：视频在**播放器里静音**会让标签页音频变静音，tabCapture 就抓不到（No audio detected）。
-   正确做法：**右键视频标签页 -> 静音网站/静音标签页**（tab 级静音不影响 tabCapture 抓流）。
-   扩展已去掉"原声回放"，所以 tab 静音后只会听到中文配音。
-3. 保持扩展弹窗打开、视频标签页处于**前台激活**状态再点 Start Capture（弹窗关闭会中断抓流）。
+扩展实际是**抓标签页音频**（`chrome.tabCapture`），不依赖麦克风。
+自 v1.1.0 起扩展改为 **MV3 后台架构**（offscreen 常驻 + 点击图标开关），不再弹窗依赖，
+因此"点了视频弹窗就消失/没声音"已修复。
+
+**使用姿势（v1.1.0）**：
+1. 先启动服务 `dubbing\start_services.ps1`，设好 `DEEPSEEK_API_KEY`。
+2. `chrome://extensions` → 开发者模式 → 加载 `chrome-extension/`（更新过代码后要**重新加载**）。
+3. 打开视频，**右键标签页 → 静音网站**（tab 级静音，别在播放器里静音，否则抓不到音频）。
+4. **点扩展图标** → 图标出现绿色 **ON** → 几秒后听到中文配音；再点一次停止。
+
+**若仍有问题**：
+- 看 Service Worker 控制台（`chrome://extensions` → 该扩展 → "Service Worker"），找 `[background]`/`[offscreen]` 报错。
+- 确认 `127.0.0.1:8000`（WLK）、`127.0.0.1:5100`（glue）服务在跑：`curl http://127.0.0.1:8000/health`。
+- 确认 `DEEPSEEK_API_KEY` 环境变量已设置（`setx DEEPSEEK_API_KEY sk-xxx` 后**重开终端/重启服务**）。
+- 报错 "DeepSeek API key missing" = glue 启动时没读到 key。
+
+## 11. 如何让"几秒内就开始听到同传"
+- 后台常驻抓流（v1.1.0 扩展）保证从点击图标开始持续处理。
+- 已调低延迟：`debounce_seconds: 1.0`、`queue_seconds: 1.0`（改后重启 glue）。
+- 首句延迟 ≈ ASR 提交(2~5s) + DeepSeek(1~2s) + TTS(3~8s 短句) ≈ 6~15s；
+  长句会慢（TTS RTF ~2）。要更快可：改用更短句长、或 GPU 空闲时跑。
