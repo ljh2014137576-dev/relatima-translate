@@ -1,9 +1,9 @@
 // Relatima Translate · offscreen document
-// 常驻运行：抓取标签页音频 → PCM → WLK WS(:8000) → 转发翻译消息到 glue 中继(:5100)。
+// 常驻运行：抓取标签页音频 → PCM → glue /capture (:5100)。
+// glue 负责云端 ASR(OpenRouter) → 翻译(DeepSeek) → 配音(MiniMax) → 播放。
 // 与 popup 无关，弹窗关闭/点击视频都不会中断。
 
-const WLK_URL = "ws://127.0.0.1:8000/asr?target_language=zh";
-const GLUE_URL = "ws://127.0.0.1:5100/relay";
+const CAPTURE_URL = "ws://127.0.0.1:5100/capture";
 
 let ready = false;
 let stream = null;
@@ -11,10 +11,8 @@ let audioContext = null;
 let source = null;
 let workletNode = null;
 let recorderWorker = null;
-let wlkWs = null;
-let glueWs = null;
-let glueReconnectTimer = null;
-let wlkReconnectTimer = null;
+let captureWs = null;
+let captureReconnectTimer = null;
 let running = false;
 const pending = [];
 
@@ -60,62 +58,44 @@ async function start(streamId) {
       config: { sampleRate: audioContext.sampleRate, targetSampleRate: 16000 },
     });
     recorderWorker.onmessage = (e) => {
-      if (wlkWs && wlkWs.readyState === WebSocket.OPEN) wlkWs.send(e.data.buffer);
+      if (captureWs && captureWs.readyState === WebSocket.OPEN) captureWs.send(e.data.buffer);
     };
     workletNode.port.onmessage = (e) => {
       recorderWorker.postMessage({ command: "record", buffer: e.data }, [e.data.buffer]);
     };
 
-    connectWlk();
-    connectGlue();
+    connectCapture();
     running = true;
-    console.log("[offscreen] capture running");
+    console.log("[offscreen] capture running -> glue /capture");
   } catch (err) {
     console.error("[offscreen] start failed:", err);
   }
 }
 
-function connectWlk() {
-  try { wlkWs && wlkWs.close(); } catch (e) {}
-  wlkWs = new WebSocket(WLK_URL);
-  wlkWs.binaryType = "arraybuffer";
-  wlkWs.onopen = () => console.log("[offscreen] WLK connected");
-  wlkWs.onmessage = (ev) => {
-    // 转发翻译结果到 glue（glue 会配音）
-    if (glueWs && glueWs.readyState === WebSocket.OPEN) {
-      try { glueWs.send(ev.data); } catch (e) {}
-    }
-  };
-  wlkWs.onclose = () => {
-    console.warn("[offscreen] WLK disconnected, reconnecting in 3s");
-    wlkReconnectTimer = setTimeout(connectWlk, 3000);
-  };
-}
-
-function connectGlue() {
-  try { glueWs && glueWs.close(); } catch (e) {}
-  glueWs = new WebSocket(GLUE_URL);
-  glueWs.onopen = () => console.log("[offscreen] glue relay connected");
-  glueWs.onclose = () => {
-    console.warn("[offscreen] glue relay disconnected, reconnecting in 3s");
-    glueReconnectTimer = setTimeout(connectGlue, 3000);
+function connectCapture() {
+  try { captureWs && captureWs.close(); } catch (e) {}
+  captureWs = new WebSocket(CAPTURE_URL);
+  captureWs.binaryType = "arraybuffer";
+  captureWs.onopen = () => console.log("[offscreen] glue capture connected");
+  captureWs.onclose = () => {
+    console.warn("[offscreen] glue capture disconnected, reconnecting in 2s");
+    if (running) captureReconnectTimer = setTimeout(connectCapture, 2000);
   };
 }
 
 function stop() {
   running = false;
-  clearTimeout(glueReconnectTimer);
-  clearTimeout(wlkReconnectTimer);
+  clearTimeout(captureReconnectTimer);
   try { recorderWorker && recorderWorker.terminate(); } catch (e) {}
   try { workletNode && workletNode.disconnect(); } catch (e) {}
   try { source && source.disconnect(); } catch (e) {}
   try { stream && stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
   try { audioContext && audioContext.close(); } catch (e) {}
-  try { wlkWs && wlkWs.close(); } catch (e) {}
-  try { glueWs && glueWs.close(); } catch (e) {}
-  stream = audioContext = source = workletNode = recorderWorker = wlkWs = glueWs = null;
+  try { captureWs && captureWs.close(); } catch (e) {}
+  stream = audioContext = source = workletNode = recorderWorker = captureWs = null;
   console.log("[offscreen] stopped");
 }
 
 ready = true;
 drainPending();
+

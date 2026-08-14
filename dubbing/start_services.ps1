@@ -28,34 +28,48 @@ if (-not (Test-Path "$Root\index-tts")) { Write-Host "ERROR: $Root\index-tts not
 if (-not (Test-Path "$Root\venv_wlk\Scripts\wlk.exe")) { Write-Host "ERROR: venv_wlk missing."; exit 1 }
 if (-not (Test-Path "$Root\venv_glue\Scripts\python.exe")) { Write-Host "ERROR: venv_glue missing."; exit 1 }
 
-# --- 1. WhisperLiveKit ------------------------------------------------------
-Write-Host "[1/3] Starting WhisperLiveKit on :8000 ..."
-$wlk = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
-if ($wlk) {
-    Write-Host "  WLK already running"
-} else {
-    $warmup = "$Root\dubbing\samples\jfk.wav"
-    $args = @("--model","small","--language","auto","--target-language","zh",
-              "--nllb-size","600M","--host","127.0.0.1","--port","8000",
-              "--pcm-input","--cors-origins","*")
-    if (Test-Path $warmup) { $args += @("--warmup-file", $warmup) }
-    Start-Process -FilePath "$Root\venv_wlk\Scripts\wlk.exe" -ArgumentList $args `
-        -WorkingDirectory $Root -WindowStyle Hidden `
-        -RedirectStandardOutput "$Root\wlk_stdout.log" -RedirectStandardError "$Root\wlk_stderr.log" | Out-Null
+function Get-Provider($section) {
+    $lines = Get-Content "$Root\glue\config.yaml" -ErrorAction SilentlyContinue
+    if (-not $lines) { return "" }
+    $idx = ($lines | Select-String "^$section\s*:" | Select-Object -First 1).LineNumber
+    if (-not $idx) { return "" }
+    $p = $lines | Select-Object -Skip $idx | Where-Object { $_ -match '^\s+provider:' } | Select-Object -First 1
+    if ($p -match ':\s*"?([\w-]+)"?') { return $Matches[1] }
+    return ""
 }
-$ok = $false
-for ($i=0; $i -lt 30; $i++) {
-    Start-Sleep -Seconds 5
-    try { if ((curl.exe -s -m 3 "http://127.0.0.1:8000/health") -match "ok") { Write-Host "  WLK healthy"; $ok = $true; break } } catch {}
-}
-if (-not $ok) { Write-Host "  WARNING: WLK not healthy yet" }
 
-# --- 2. IndexTTS2 service (only needed for provider=local) ----------------
-$provider = "local"
-if (Test-Path "$Root\glue\config.yaml") {
-    $line = Get-Content "$Root\glue\config.yaml" | Where-Object { $_ -match '^\s*provider:' } | Select-Object -First 1
-    if ($line -match ':\s*"?([\w-]+)"?') { $provider = $Matches[1] }
+# --- 1. WhisperLiveKit (only for asr.provider = wlk) ----------------------
+$asrProvider = Get-Provider "asr"
+if (-not $asrProvider) { $asrProvider = "openai" }
+Write-Host "[1/3] ASR provider: $asrProvider"
+if ($asrProvider -ne "wlk") {
+    Write-Host "  Using cloud ASR (OpenRouter Whisper); local WhisperLiveKit skipped."
+} else {
+    Write-Host "Starting WhisperLiveKit on :8000 ..."
+    $wlk = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
+    if ($wlk) {
+        Write-Host "  WLK already running"
+    } else {
+        $warmup = "$Root\dubbing\samples\jfk.wav"
+        $args = @("--model","small","--language","auto","--target-language","zh",
+                  "--nllb-size","600M","--host","127.0.0.1","--port","8000",
+                  "--pcm-input","--cors-origins","*")
+        if (Test-Path $warmup) { $args += @("--warmup-file", $warmup) }
+        Start-Process -FilePath "$Root\venv_wlk\Scripts\wlk.exe" -ArgumentList $args `
+            -WorkingDirectory $Root -WindowStyle Hidden `
+            -RedirectStandardOutput "$Root\wlk_stdout.log" -RedirectStandardError "$Root\wlk_stderr.log" | Out-Null
+    }
+    $ok = $false
+    for ($i=0; $i -lt 30; $i++) {
+        Start-Sleep -Seconds 5
+        try { if ((curl.exe -s -m 3 "http://127.0.0.1:8000/health") -match "ok") { Write-Host "  WLK healthy"; $ok = $true; break } } catch {}
+    }
+    if (-not $ok) { Write-Host "  WARNING: WLK not healthy yet" }
 }
+
+# --- 2. IndexTTS2 service (only needed for tts.provider=local) --------------
+$provider = Get-Provider "tts"
+if (-not $provider) { $provider = "local" }
 Write-Host "[2/3] TTS provider: $provider"
 if ($provider -ne "local") {
     Write-Host "  Skipping local IndexTTS2 service (using $provider)."

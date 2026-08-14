@@ -1,3 +1,12 @@
+asr:
+  provider: "openai"           # openai (OpenRouter whisper) | wlk (legacy local, not recommended)
+  openrouter_api_key: ""       # or env OPENROUTER_API_KEY
+  model: "openai/whisper-large-v3"
+  base_url: "https://openrouter.ai/api/v1"
+  chunk_seconds: 8             # transcribe this much NEW audio per call
+  overlap_seconds: 4           # include this much past audio for context
+  timeout: 60
+
 wlk:
   url: "ws://127.0.0.1:8000/asr?target_language=zh"
   min_text_len: 2
@@ -15,7 +24,7 @@ llm:
   glossary: []            # e.g. [{"from": "RTX", "to": "RTX"}]
 
 tts:
-  provider: "local"        # local | minimax | elevenlabs | edge
+  provider: "minimax"      # local | minimax | elevenlabs | edge
   url: "http://127.0.0.1:50001/tts"     # only for provider=local
   ref_audio: "refs/default.wav"         # reference voice (used for cloning)
   max_text_len: 80
@@ -24,7 +33,7 @@ tts:
     api_key: ""            # or env MINIMAX_API_KEY
     group_id: ""           # or env MINIMAX_GROUP_ID (required by MiniMax)
     model: "speech-02-turbo"
-    voice_id: ""           # optional; if empty, auto-clone from ref_audio on first use
+    voice_id: "rt_relatima_v1"  # optional; if empty, auto-clone from ref_audio on first use
     timeout: 60
   elevenlabs:
     api_key: ""            # or env ELEVENLABS_API_KEY

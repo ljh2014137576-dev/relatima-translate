@@ -318,6 +318,20 @@ class Pipeline:
                 print(f"[ASR+TRANS(flush)] {text}", flush=True)
                 self.text_queue.put(text)
 
+    # -- cloud ASR entry (from CaptureBuffer) -----------------------------
+    def feed_asr_text(self, key, text):
+        now = time.time()
+        if not text:
+            return
+        if self.llm_enabled:
+            for s in self.sent_tracker.update(key, text, now):
+                print(f"[ASR->LLM] {s[:60]}", flush=True)
+                self.llm_queue.put(s)
+        else:
+            for s in self.tracker.update(key, text, now):
+                print(f"[ASR+TRANS] {s[:60]}", flush=True)
+                self.text_queue.put(s)
+
     # -- LLM translation worker ------------------------------------------
     def _llm_loop(self):
         batch = []
@@ -380,7 +394,35 @@ class Pipeline:
                     self._active -= 1
 
 
-# -- browser mode: relay server ------------------------------------------
+# -- browser mode: capture + relay servers --------------------------------
+async def capture_server(pipeline, cfg):
+    """WS endpoint that receives raw PCM (16k s16le mono) and runs cloud ASR."""
+    from capture import CaptureBuffer
+    from whisper_client import OpenRouterWhisper
+
+    host = cfg["relay"]["host"]
+    port = cfg["relay"]["port"]
+    whisper = OpenRouterWhisper(cfg)
+    buffer = CaptureBuffer(cfg, whisper, on_text=pipeline.feed_asr_text)
+    buffer.start()
+
+    async def handler(ws):
+        print(f"[capture] audio source connected ({ws.remote_address})", flush=True)
+        try:
+            async for msg in ws:
+                if isinstance(msg, bytes) and msg:
+                    buffer.feed(msg)
+        except websockets.exceptions.ConnectionClosed:
+            pass
+        finally:
+            buffer.flush_now()
+            print("[capture] audio source disconnected", flush=True)
+
+    async with websockets.serve(handler, host, port, subprotocols=[]):
+        print(f"[glue] capture listening on ws://{host}:{port}/capture", flush=True)
+        await asyncio_future_forever()
+
+
 async def relay_server(pipeline, cfg):
     host = cfg["relay"]["host"]
     port = cfg["relay"]["port"]
@@ -411,7 +453,8 @@ async def run_browser(cfg):
     pipeline = Pipeline(cfg)
     pipeline.start()
     try:
-        await relay_server(pipeline, cfg)
+        # cloud ASR (OpenRouter) is the default; /relay kept for legacy WLK mode
+        await capture_server(pipeline, cfg)
     except KeyboardInterrupt:
         pipeline.stop()
 

@@ -76,21 +76,33 @@ class MiniMaxTTS:
         if cached:
             self.voice_id = cached
             return cached
+
+        def _post(url, **kw):
+            return requests.post(url, headers={"Authorization": f"Bearer {self.api_key}"},
+                                 timeout=self.timeout, **kw)
+
+        # 1) upload the reference audio -> file_id
         with open(ref_audio, "rb") as f:
-            resp = requests.post(
-                f"https://api.minimaxi.com/v1/voice_clone?GroupId={self.group_id}",
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                files={"file": f},
-                data={"voice_id": f"rt_{int(time.time())}", "voice_name": "relatima"},
-                timeout=self.timeout,
+            up = _post(
+                f"https://api.minimaxi.com/v1/files/upload?GroupId={self.group_id}",
+                files={"file": f}, data={"purpose": "voice_clone"},
             )
-        j = resp.json()
-        code = j.get("base_resp", {}).get("status_code")
+        uj = up.json()
+        fid = uj.get("file", {}).get("file_id")
+        if not fid:
+            raise TTSError(f"MiniMax file upload failed: {uj.get('base_resp')}")
+
+        # 2) clone the voice
+        vid = f"rt_{int(time.time())}"
+        vc = _post(
+            f"https://api.minimaxi.com/v1/voice_clone?GroupId={self.group_id}",
+            json={"file_id": fid, "voice_id": vid, "voice_name": "relatima"},
+        )
+        vj = vc.json()
+        code = vj.get("base_resp", {}).get("status_code")
         if code not in (0, 200):
-            raise TTSError(f"MiniMax voice_clone failed: {code} {j.get('base_resp', {}).get('status_msg')}")
-        vid = j.get("voice_id", "")
-        if not vid:
-            raise TTSError("MiniMax voice_clone returned no voice_id")
+            raise TTSError(f"MiniMax voice_clone failed: {code} {vj.get('base_resp', {}).get('status_msg')}")
+
         _save_cached_voice(ref_audio, "minimax", vid)
         self.voice_id = vid
         return vid
@@ -99,12 +111,13 @@ class MiniMaxTTS:
         vid = self.ensure_voice(ref_audio) if ref_audio else self.voice_id
         if not vid:
             raise TTSError("MiniMax: no voice_id (set tts.minimax.voice_id or provide ref_audio)")
+        sr = 32000
         payload = {
             "model": self.model,
             "text": text,
             "stream": False,
             "voice_setting": {"voice_id": vid, "speed": 1.0, "vol": 1.0, "pitch": 0},
-            "audio_setting": {"sample_rate": 32000, "bitrate": 128000, "format": "wav", "channel": 1},
+            "audio_setting": {"sample_rate": sr, "bitrate": 128000, "format": "pcm", "channel": 1},
         }
         resp = requests.post(
             f"https://api.minimaxi.com/v1/t2a_v2?GroupId={self.group_id}",
@@ -117,9 +130,35 @@ class MiniMaxTTS:
         if code not in (0, 200):
             raise TTSError(f"MiniMax t2a failed: {code} {j.get('base_resp', {}).get('status_msg')}")
         audio = j.get("data", {}).get("audio", "")
-        if not audio:
-            raise TTSError("MiniMax: empty audio response")
-        return base64.b64decode(audio)
+        pcm = base64.b64decode(audio) if audio else b""
+
+        # MiniMax intermittently returns "0000"/empty for a (freshly) cloned
+        # voice; retry with backoff until real audio comes back.
+        attempts = 0
+        while len(pcm) < 2000 and attempts < 8:
+            attempts += 1
+            time.sleep(5)
+            pcm = self._t2a_pcm(text, vid, sr)
+        if len(pcm) < 2000:
+            raise TTSError("MiniMax: voice returned empty audio repeatedly - clone may still be processing")
+        return _wav_from_pcm(pcm, sr)
+
+    def _t2a_pcm(self, text, vid, sr):
+        payload = {
+            "model": self.model,
+            "text": text,
+            "stream": False,
+            "voice_setting": {"voice_id": vid, "speed": 1.0, "vol": 1.0, "pitch": 0},
+            "audio_setting": {"sample_rate": sr, "bitrate": 128000, "format": "pcm", "channel": 1},
+        }
+        r = requests.post(
+            f"https://api.minimaxi.com/v1/t2a_v2?GroupId={self.group_id}",
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            json=payload, timeout=self.timeout,
+        )
+        j = r.json()
+        audio = j.get("data", {}).get("audio", "")
+        return base64.b64decode(audio) if audio else b""
 
 
 # ---------------------------------------------------------------- ElevenLabs
