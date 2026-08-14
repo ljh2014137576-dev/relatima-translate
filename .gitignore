@@ -44,3 +44,7 @@ Thumbs.db
 Desktop.ini
 .DS_Store
 glue/refs/.voice_cache.json
+
+# Release build artifacts
+releases/*.crx
+releases/*.pem
