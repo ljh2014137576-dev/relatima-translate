@@ -1,9 +1,13 @@
 """DeepSeek LLM translator (OpenAI-compatible chat completions API).
 
-Replaces WhisperLiveKit's built-in NLLB translation with a higher-quality
-DeepSeek translation. Input: source sentences; output: Chinese sentences.
-Batching joins sentences with numbered lines so the response can be mapped
-back reliably.
+Supports two modes:
+  * 1:1 batch  (merge=False) : each input line maps to one output line
+                               (used by batch_dub.py for subtitle timing)
+  * passage    (merge=True ) : fragments are merged into complete sentences
+                               with conversation context (used by streaming glue)
+
+Both modes can inject web-search references and previous-sentence context so
+proper nouns, terms and pronoun references stay consistent.
 """
 import os
 import re
@@ -16,8 +20,6 @@ _NUM_PREFIX_RE = re.compile(r"^\s*\d+\.\s*")
 class DeepSeekTranslator:
     def __init__(self, cfg):
         llm = cfg["llm"]
-        # Config key takes precedence; fall back to the DEEPSEEK_API_KEY env var
-        # so the API key is never committed to the repository.
         self.api_key = llm.get("api_key") or os.environ.get("DEEPSEEK_API_KEY", "")
         if not self.api_key:
             raise RuntimeError(
@@ -25,10 +27,9 @@ class DeepSeekTranslator:
             )
         self.base_url = llm.get("base_url", "https://api.deepseek.com")
         self.model = llm.get("model", "deepseek-chat")
-        self.timeout = llm.get("timeout", 30)
+        self.reasoning_model = llm.get("reasoning_model", "") or os.environ.get("DEEPSEEK_REASONING_MODEL", "")
+        self.timeout = llm.get("timeout", 60)
         self.glossary = llm.get("glossary", [])
-        self.system_prompt = self._build_prompt()
-        # optional web search for term verification
         try:
             from web_search import TavilySearch
             self.search = TavilySearch(cfg)
@@ -36,58 +37,84 @@ class DeepSeekTranslator:
             print(f"[llm] web_search disabled: {e}", flush=True)
             self.search = None
 
-    def _build_prompt(self):
-        prompt = (
-            "You are a professional simultaneous interpreter. Translate the user's "
-            "text into fluent, natural Simplified Chinese. Keep proper nouns, "
-            "technical terms, numbers and brand names accurate and consistent. "
-            "The user may send several numbered lines; translate each line "
-            "separately, keep the numbering, and output ONLY the numbered "
-            "translations with no explanations."
+    # -- prompt -----------------------------------------------------------
+    def _build_system(self, merge):
+        base = (
+            "You are a professional simultaneous interpreter for real-time video "
+            "dubbing. Translate the user's speech into fluent, natural Simplified Chinese."
         )
+        rules = [
+            "Take your time and think carefully about context, proper nouns, technical terms, "
+            "memes and how the fragments connect before you translate.",
+            "Keep proper nouns, terms and names accurate and consistent with the earlier context.",
+        ]
         if self.glossary:
             terms = "\n".join(f"{g['from']} -> {g['to']}" for g in self.glossary)
-            prompt += f"\n\nGlossary (use these translations):\n{terms}"
-        return prompt
+            rules.append(f"Glossary (must use these translations):\n{terms}")
+        if merge:
+            rules.append(
+                "If several consecutive fragments together form one complete sentence, "
+                "merge them into that single complete sentence."
+            )
+            rules.append(
+                "Output the translation as lines - one complete sentence per line, "
+                "no numbering, no explanations."
+            )
+        else:
+            rules.append(
+                "The user sends several numbered lines. Translate each line separately, "
+                "keep the numbering, and output ONLY the numbered translations."
+            )
+        return base + "\n\n" + "\n".join(f"- {r}" for r in rules)
 
-    def _call(self, user_text):
+    def _call(self, messages, model):
         resp = requests.post(
             f"{self.base_url}/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": self.model,
-                "messages": [
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": user_text},
-                ],
-                "temperature": 0.3,
-                "max_tokens": 2048,
-            },
+            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+            json={"model": model, "messages": messages,
+                  "temperature": 0.3, "max_tokens": 2048},
             timeout=self.timeout,
         )
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"].strip()
 
-    def translate_batch(self, sentences):
-        """Translate a list of sentences -> list of Chinese sentences.
+    # -- main entry -------------------------------------------------------
+    def translate_batch(self, sentences, context=None, merge=False):
+        """Translate `sentences` -> list of Chinese sentences.
 
-        Falls back to a single whole-batch translation if the line mapping
-        does not match.
+        context: list of (source, zh) previously translated pairs used as
+                 conversation context for coherence.
+        merge:   merge fragments into complete sentences (passage mode).
         """
         if not sentences:
             return []
-        numbered = "\n".join(f"{i + 1}. {s}" for i, s in enumerate(sentences))
 
-        # Optional web search: verify proper nouns/terms before translating.
+        if merge:
+            user = "\n".join(sentences)
+            system = self._build_system(True)
+            model = self.reasoning_model or self.model
+        else:
+            numbered = "\n".join(f"{i + 1}. {s}" for i, s in enumerate(sentences))
+            user = numbered
+            system = self._build_system(False)
+            model = self.model
+
+        # conversation context (previous source -> zh)
+        if context:
+            ctx_lines = [f"{src} -> {zh}" for src, zh in context[-8:]]
+            user = "[Earlier conversation]\n" + "\n".join(ctx_lines) + "\n\n" + user
+
+        # optional web search for proper nouns / terms
         if self.search is not None:
-            ctx = self.search.lookup(numbered)
-            if ctx:
-                numbered = numbered + "\n\n[Web search reference]\n" + ctx
+            ref = self.search.lookup(user)
+            if ref:
+                user = user + "\n\n[Web search reference]\n" + ref
 
-        out = self._call(numbered)
+        out = self._call(
+            [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            model=model,
+        )
+
         lines = []
         for line in out.splitlines():
             line = line.strip()
@@ -96,7 +123,9 @@ class DeepSeekTranslator:
             line = _NUM_PREFIX_RE.sub("", line)
             if line:
                 lines.append(line)
-        if len(lines) == len(sentences):
-            return lines
-        # Mapping mismatch: return the whole response as a single translation.
-        return [out]
+
+        if merge:
+            # one complete sentence per line; fall back to whole passage
+            return lines if lines else [out]
+        # 1:1 mapping; fall back to single whole-batch translation
+        return lines if len(lines) == len(sentences) else [out]

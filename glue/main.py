@@ -19,6 +19,7 @@ import queue
 import re
 import threading
 import time
+import collections
 
 import websockets
 import yaml
@@ -230,8 +231,11 @@ class Pipeline:
                 force_len=cfg["wlk"].get("force_len", 200),
                 min_len=cfg["wlk"].get("min_text_len", 2),
             )
-            self.max_batch = cfg["llm"].get("max_batch", 4)
-            self.batch_window = cfg["llm"].get("batch_window", 0.4)
+            self.max_batch = cfg["llm"].get("max_batch", 6)
+            self.batch_window = cfg["llm"].get("batch_window", 0.5)
+            self.llm_history = collections.deque(
+                maxlen=int(cfg["llm"].get("context_sentences", 8))
+            )
             print(f"[glue] LLM translation enabled: {self.llm.model}", flush=True)
             # expose the search backend so the extension can toggle it live
             try:
@@ -254,6 +258,25 @@ class Pipeline:
         threading.Thread(target=self._tick_loop, daemon=True).start()
         if self.llm_enabled:
             threading.Thread(target=self._llm_loop, daemon=True).start()
+
+    def reset_context(self):
+        """Start a fresh context for a new video session: clear the per-video
+        translation history (source+translated pairs) and the ASR sentence
+        trackers so the next dubbing is context-independent."""
+        if self.llm_enabled:
+            self.llm_history.clear()
+            self.sent_tracker = SentenceTracker(
+                debounce=self.cfg["wlk"].get("debounce_seconds", 1.0),
+                force_len=self.cfg["wlk"].get("force_len", 200),
+                min_len=self.cfg["wlk"].get("min_text_len", 2),
+            )
+        else:
+            self.tracker = LineTracker(
+                debounce=self.cfg["wlk"].get("debounce_seconds", 1.0),
+                force_len=self.cfg["wlk"].get("force_len", 60),
+                min_len=self.cfg["wlk"].get("min_text_len", 2),
+            )
+        print("[glue] context reset (new video session)", flush=True)
 
     def _tick_loop(self):
         while not self._stop:
@@ -368,13 +391,19 @@ class Pipeline:
 
     def _translate_batch(self, sentences):
         try:
-            results = self.llm.translate_batch(sentences)
+            # pass the previously translated sentences as conversation context
+            # and let DeepSeek merge fragments into complete sentences.
+            context = list(self.llm_history) if self.llm_history else None
+            results = self.llm.translate_batch(sentences, context=context, merge=True)
+            # update history for the next batch (keeps pronoun/term coherence)
+            src_text = " ".join(sentences)
             for zh in results:
                 zh = zh.strip()
                 if not zh:
                     continue
                 print(f"[LLM->ZH] {zh[:50]}", flush=True)
                 self.text_queue.put(zh)
+                self.llm_history.append((src_text, zh))
         except Exception as e:
             print(f"[LLM FAIL] {sentences[0][:30]}... -> {e}", flush=True)
 
@@ -402,18 +431,23 @@ class Pipeline:
 
 # -- browser mode: capture + relay servers --------------------------------
 async def capture_server(pipeline, cfg):
-    """WS endpoint that receives raw PCM (16k s16le mono) and runs cloud ASR."""
+    """WS endpoint that receives raw PCM (16k s16le mono) and runs cloud ASR.
+
+    Each connection is treated as ONE video session: it gets a fresh ASR
+    buffer and resets the per-video translation context.
+    """
     from capture import CaptureBuffer
     from whisper_client import OpenRouterWhisper
 
     host = cfg["relay"]["host"]
     port = cfg["relay"]["port"]
     whisper = OpenRouterWhisper(cfg)
-    buffer = CaptureBuffer(cfg, whisper, on_text=pipeline.feed_asr_text)
-    buffer.start()
 
     async def handler(ws):
-        print(f"[capture] audio source connected ({ws.remote_address})", flush=True)
+        pipeline.reset_context()          # new video = fresh context
+        buffer = CaptureBuffer(cfg, whisper, on_text=pipeline.feed_asr_text)
+        buffer.start()
+        print(f"[capture] video session started ({ws.remote_address})", flush=True)
         try:
             async for msg in ws:
                 if isinstance(msg, bytes) and msg:
@@ -422,7 +456,8 @@ async def capture_server(pipeline, cfg):
             pass
         finally:
             buffer.flush_now()
-            print("[capture] audio source disconnected", flush=True)
+            buffer.stop()
+            print("[capture] video session ended", flush=True)
 
     async with websockets.serve(handler, host, port, subprotocols=[]):
         print(f"[glue] capture listening on ws://{host}:{port}/capture", flush=True)

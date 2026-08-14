@@ -18,8 +18,10 @@ llm:
   api_key: ""             # leave empty to use env var DEEPSEEK_API_KEY (recommended)
   base_url: "https://api.deepseek.com"
   model: "deepseek-chat"
-  max_batch: 4            # sentences per API call
-  batch_window: 0.4       # seconds to wait for more sentences before flushing a batch
+  max_batch: 6            # sentences per API call (batch multiple fragments together)
+  batch_window: 0.5       # seconds to wait for more sentences before flushing a batch
+  context_sentences: 16   # per-video: keep this many source->zh pairs as conversation context
+  reasoning_model: ""     # optional: set "deepseek-reasoner" for deeper thinking (slower)
   timeout: 30
   glossary: []            # e.g. [{"from": "RTX", "to": "RTX"}]
   web_search:
