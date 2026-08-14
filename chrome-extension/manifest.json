@@ -25,7 +25,8 @@
         "service_worker": "background.js"
     },
     "action": {
-        "default_title": "Relatima Translate（点击开始/停止同传）",
+        "default_title": "Relatima Translate",
+        "default_popup": "popup.html",
         "default_icon": {
             "16": "icons/icon16.png",
             "48": "icons/icon48.png",

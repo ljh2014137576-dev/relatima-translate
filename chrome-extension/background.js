@@ -27,19 +27,20 @@ function setBadge(text, color) {
   } catch (e) { /* ignore */ }
 }
 
-// 点图标：开始 / 停止
-chrome.action.onClicked.addListener(async (tab) => {
-  try {
-    if (capturing) {
-      await stopCapture();
-      setBadge("");
-    } else {
-      await startCapture(tab.id);
-    }
-  } catch (err) {
-    console.error("[background] toggle failed:", err);
-    setBadge("!", "#c62828");
-    setTimeout(() => setBadge(capturing ? "ON" : ""), 3000);
+// 消息入口：popup 发来 START / STOP / STATUS
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg.type === "START") {
+    startCapture(msg.tabId).then(() => sendResponse({ ok: true, running: true }))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (msg.type === "STOP") {
+    stopCapture().then(() => sendResponse({ ok: true, running: false }));
+    return true;
+  }
+  if (msg.type === "STATUS") {
+    sendResponse({ running: capturing, tabId: captureTabId });
+    return;
   }
 });
 
@@ -68,6 +69,7 @@ async function stopCapture() {
   captureTabId = null;
   try { await chrome.runtime.sendMessage({ type: "STOP" }); } catch (e) {}
   await closeOffscreen();
+  setBadge("");
   console.log("[background] capture stopped");
 }
 

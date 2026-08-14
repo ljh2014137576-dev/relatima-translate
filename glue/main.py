@@ -233,6 +233,12 @@ class Pipeline:
             self.max_batch = cfg["llm"].get("max_batch", 4)
             self.batch_window = cfg["llm"].get("batch_window", 0.4)
             print(f"[glue] LLM translation enabled: {self.llm.model}", flush=True)
+            # expose the search backend so the extension can toggle it live
+            try:
+                from control import register_search
+                register_search(self.llm.search)
+            except Exception as e:
+                print(f"[glue] control not wired: {e}", flush=True)
         else:
             self.llm = None
             self.llm_queue = None
@@ -453,6 +459,8 @@ async def run_browser(cfg):
     pipeline = Pipeline(cfg)
     pipeline.start()
     try:
+        from control import start_control
+        start_control()
         # cloud ASR (OpenRouter) is the default; /relay kept for legacy WLK mode
         await capture_server(pipeline, cfg)
     except KeyboardInterrupt:
