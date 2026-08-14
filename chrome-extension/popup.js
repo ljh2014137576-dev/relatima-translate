@@ -6,6 +6,12 @@ const toggle = document.getElementById("toggle");
 const wsCheck = document.getElementById("websearch");
 const statusEl = document.getElementById("status");
 const retryBtn = document.getElementById("retry");
+const verEl = document.getElementById("ver");
+
+// show the loaded extension version so we can confirm a fresh install
+if (verEl && chrome.runtime && chrome.runtime.getManifest) {
+  verEl.textContent = "v" + chrome.runtime.getManifest().version;
+}
 
 function setStatus(html, cls) {
   statusEl.className = "status" + (cls ? " " + cls : "");
@@ -31,13 +37,19 @@ async function testWSCapture() {
   });
 }
 
+async function tryControl() {
+  for (const base of [CONTROL, "http://localhost:5120"]) {
+    try {
+      const r = await fetchWithTimeout(`${base}/websearch`);
+      if (r.ok) return true;
+    } catch (e) {}
+  }
+  return false;
+}
+
 async function detect() {
   // HTTP control (:5120)
-  let http = false;
-  try {
-    const r = await fetchWithTimeout(`${CONTROL}/websearch`);
-    http = r.ok;
-  } catch (e) {}
+  const http = await tryControl();
 
   // WS capture (:5100)
   const ws = await testWSCapture();

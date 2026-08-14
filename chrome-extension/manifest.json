@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Relatima Translate · 实时同传",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "description": "后台常驻抓取标签页音频，实时翻译成中文并用克隆原声配音（同声传译）。点击图标开始/停止。",
     "icons": {
         "16": "icons/icon16.png",
