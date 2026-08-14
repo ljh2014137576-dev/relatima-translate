@@ -22,6 +22,13 @@ llm:
   batch_window: 0.4       # seconds to wait for more sentences before flushing a batch
   timeout: 30
   glossary: []            # e.g. [{"from": "RTX", "to": "RTX"}]
+  web_search:
+    enabled: true         # verify proper nouns/terms via web search before translating
+    api_key: ""           # or env TAVILY_API_KEY
+    max_results: 2        # search results per term
+    search_depth: "basic" # basic | advanced
+    max_context_chars: 300
+    timeout: 20
 
 tts:
   provider: "minimax"      # local | minimax | elevenlabs | edge
