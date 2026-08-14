@@ -3,32 +3,34 @@
 <head>
 <meta charset="utf-8">
 <style>
-  body { width: 260px; margin: 0; padding: 12px; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #f7f8fa; }
+  body { width: 280px; margin: 0; padding: 12px; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #f7f8fa; }
   .title { font-size: 14px; font-weight: 600; color: #1f2328; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; }
-  .dot.on { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
   #toggle { width: 100%; padding: 10px; font-size: 14px; font-weight: 600; border: none; border-radius: 8px;
-            cursor: pointer; background: #2563eb; color: #fff; margin-bottom: 10px; }
+            cursor: pointer; background: #2563eb; color: #fff; margin-bottom: 12px; }
   #toggle.on { background: #dc2626; }
-  .switch-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 2px; font-size: 13px; color: #374151; }
+  .row { display: flex; align-items: center; justify-content: space-between; padding: 7px 2px; font-size: 13px; color: #374151; }
   .switch { position: relative; width: 40px; height: 22px; }
   .switch input { opacity: 0; width: 0; height: 0; }
   .slider { position: absolute; inset: 0; background: #cbd5e1; border-radius: 22px; transition: .2s; cursor: pointer; }
   .slider::before { content: ""; position: absolute; width: 18px; height: 18px; left: 2px; top: 2px; background: #fff; border-radius: 50%; transition: .2s; }
   input:checked + .slider { background: #2563eb; }
   input:checked + .slider::before { transform: translateX(18px); }
-  .hint { font-size: 11px; color: #6b7280; }
-  #status { font-size: 12px; color: #6b7280; margin-top: 8px; }
+  .hint { font-size: 11px; color: #9ca3af; }
+  .status { margin-top: 10px; padding: 8px 10px; border-radius: 6px; font-size: 12px; background: #eef2f7; color: #6b7280; line-height: 1.5; }
+  .status.ok { background: #ecfdf5; color: #047857; }
+  .status.err { background: #fef2f2; color: #b91c1c; }
+  #retry { margin-top: 8px; width: 100%; padding: 6px; font-size: 12px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; cursor: pointer; }
 </style>
 </head>
 <body>
-  <div class="title"><span class="dot" id="dot"></span> Relatima · 实时同传</div>
+  <div class="title">Relatima · 实时同传</div>
   <button id="toggle">● 开始同传</button>
-  <div class="switch-row">
-    <span>联网查证 <span class="hint">（专名/梗，Tavily）</span></span>
+  <div class="row">
+    <span>联网查证 <span class="hint">（专名/梗）</span></span>
     <label class="switch"><input type="checkbox" id="websearch"><span class="slider"></span></label>
   </div>
-  <div id="status"></div>
+  <div id="status" class="status">正在检测本地 Agent…</div>
+  <button id="retry">重新检测连接</button>
   <script src="popup.js"></script>
 </body>
 </html>
